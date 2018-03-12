@@ -25,8 +25,8 @@ public class RadarService extends Service {
         i.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         Notification.Builder constructorNotificacion = new Notification.Builder(this)
                 .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentTitle("notificación servicio")
-                .setContentText("texto servicio")
+                .setContentTitle("Servicio de espionaje")
+                .setContentText("Monitorizando su posicion")
                 .setContentIntent(PendingIntent.getActivity(this, 0, i, 0));
         startForeground(1, constructorNotificacion.build());
     }

@@ -7,7 +7,9 @@ import android.content.Intent;
 import android.content.IntentSender;
 import android.content.pm.PackageManager;
 import android.location.Location;
+import android.os.Handler;
 import android.support.annotation.NonNull;
+import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.FragmentActivity;
@@ -15,6 +17,9 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 
+import com.db4o.ObjectContainer;
+import com.db4o.ObjectSet;
+import com.db4o.query.Query;
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.common.api.ResolvableApiException;
 import com.google.android.gms.location.FusedLocationProviderClient;
@@ -37,11 +42,23 @@ import com.google.android.gms.maps.model.PolylineOptions;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.GregorianCalendar;
+import java.util.Iterator;
+import java.util.List;
+import java.util.ListIterator;
+
+import static java.lang.Math.round;
+
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
 
+    private final String DIR = "/positions4.db4o";
     private static final String TAG = "xyzyx";
     private static final int PERMISO_LOCATION = 1;
     private static final int RESOLVE_RESULT = 2;
+
+    private FloatingActionButton fab;
 
     private FusedLocationProviderClient clienteLocalizacion;
     private GoogleMap googleMap;
@@ -50,6 +67,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private LocationSettingsRequest ajustesPeticionLocalizacion;
     private SettingsClient ajustesCliente;
 
+    private DataBase db ;
+    private PolylineOptions po;
+    final Handler mHandler = new Handler();
+    Polyline poly;
+    ArrayList<LatLng> lats;
     private boolean checkPermissions() {
         int estadoPermisos = ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION);
         return estadoPermisos == PackageManager.PERMISSION_GRANTED;
@@ -58,9 +80,12 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private void init() {
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
+
+        db = new DataBase(getExternalFilesDir(null) + DIR);
+
         if(checkPermissions()) {
-            startService(new Intent(this, RadarService.class));
             startLocations();
+            startService(new Intent(this, RadarService.class));
         } else {
             requestPermissions();
         }
@@ -88,7 +113,39 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
         init();
+        layouts();
     }
+
+    void layouts(){
+        fab = findViewById(R.id.fab);
+        fab.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                po = new PolylineOptions();
+
+                Thread t = new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        ObjectSet<Position> positions = db.query();
+                        lats = new ArrayList<>();
+                        for(Position pos : positions) {
+                            System.out.println(pos.toString());
+                            lats.add(pos.getposition());
+                        }
+                        mHandler.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                poly.setPoints(lats);
+                            }
+                        });
+                    }
+                });
+                t.start();
+            }
+        });
+    }
+
+
 
     /**
      * Manipulates the map once available.
@@ -106,11 +163,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         this.googleMap.addMarker(new MarkerOptions().position(granada).title("IZV"));
         this.googleMap.moveCamera(CameraUpdateFactory.newLatLng(granada));
         this.googleMap.moveCamera(CameraUpdateFactory.zoomTo(17));
-        Polyline polyLinea = googleMap.addPolyline(new PolylineOptions()
-                .add(new LatLng(37.1608, -3.5911),
-                        new LatLng(37.1618, -3.5911),
-                        new LatLng(37.1620, -3.5926),
-                        new LatLng(37.1628, -3.5926)));
+
+        poly = googleMap.addPolyline(new PolylineOptions());
     }
 
     @Override
@@ -156,6 +210,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     @SuppressLint("MissingPermission")
     private void startLocations() {
+        System.out.println("Location started");
         clienteLocalizacion = LocationServices.getFusedLocationProviderClient(this);
         ajustesCliente = LocationServices.getSettingsClient(this);
         clienteLocalizacion.getLastLocation().addOnSuccessListener(this, new OnSuccessListener<Location>() {
@@ -163,9 +218,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             public void onSuccess(Location location) {
                 // Got last known location. In some rare situations this can be null.
                 if (location != null) {
-                    Log.v(TAG, "última localización: " + location.toString());
+                    System.out.println(location.toString());
                 } else {
-                    Log.v(TAG, "no hay última localización");
+                    System.out.println("No last location");
                 }
             }
         });
@@ -173,8 +228,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             @Override
             public void onLocationResult(LocationResult locationResult) {
                 super.onLocationResult(locationResult);
-                Location localizacion = locationResult.getLastLocation();
-                Log.v(TAG, localizacion.toString());
+                    Location loc = locationResult.getLastLocation();
+                Position pos = new Position(loc);
+                db.store(pos);
+
             }
         };
         peticionLocalizacion = new LocationRequest();
@@ -190,7 +247,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 .addOnSuccessListener(this, new OnSuccessListener<LocationSettingsResponse>() {
                     @Override
                     public void onSuccess(LocationSettingsResponse locationSettingsResponse) {
-                        Log.v(TAG, "Se cumplen todos los requisitos");
+                        System.out.println("Se cumplen todos los requisitos");
                         clienteLocalizacion.requestLocationUpdates(peticionLocalizacion, callbackLocalizacion, null);
                     }
                 })
@@ -200,16 +257,16 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         int statusCode = ((ApiException) e).getStatusCode();
                         switch (statusCode) {
                             case LocationSettingsStatusCodes.RESOLUTION_REQUIRED:
-                                Log.v(TAG, "Falta algún requisito, intento de adquisición");
+                                System.out.println("Falta algún requisito, intento de adquisición");
                                 try {
                                     ResolvableApiException rae = (ResolvableApiException) e;
                                     rae.startResolutionForResult(MapsActivity.this, RESOLVE_RESULT);
                                 } catch (IntentSender.SendIntentException sie) {
-                                    Log.v(TAG, "No se puede adquirir.");
+                                    System.out.println("No se puede adquirir.");
                                 }
                                 break;
                             case LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE:
-                                Log.v(TAG, "Falta algún requisito, que no se puede adquirir.");
+                                System.out.println("Falta algún requisito, que no se puede adquirir.");
                         }
                     }
                 });

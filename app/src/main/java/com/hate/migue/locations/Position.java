@@ -2,11 +2,13 @@ package com.hate.migue.locations;
 
 import android.location.Location;
 
+import com.google.android.gms.maps.model.LatLng;
+
 import java.util.Date;
 import java.util.GregorianCalendar;
 
 public class Position {
-    private Location position;
+    private LatLng position;
     private Date fecha;
 
     public Position() {
@@ -18,18 +20,16 @@ public class Position {
     }
 
     public Position(Location position, Date fecha) {
-        this.position = position;
+        this.position = new LatLng(position.getLatitude(), position.getLongitude());
         this.fecha = fecha;
     }
     
 
-    public Location getposition() {
+    public LatLng getposition() {
         return position;
     }
 
-    public void setposition(Location position) {
-        this.position = position;
-    }
+
 
     public Date getFecha() {
         return fecha;
